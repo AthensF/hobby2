@@ -60,14 +60,14 @@
         
         // Handle messages from service worker
         chromePort.onMessage.addListener((message) => {
-          console.log("Received message from service worker:", message);
           
           if (message.kind === "getCompletions") {
             const resolve = this.promiseMap.get(message.requestId);
             if (resolve) {
-              resolve(message.response);
+              resolve(message.response); //completionResponse, returned back to Promise requester
               this.promiseMap.delete(message.requestId);
             }
+            // console.log("Completion response at CSC:", message.response); // this is coming back
           }
         });
         
@@ -75,15 +75,15 @@
       }
       
       // Send a test message to the service worker
-      sendTestMessage(content) {
-        const message = {
-          kind: "test",
-          content: content,
-          sessionId: this.sessionId          
-        };
-        console.log("Sending test message to service worker");
-        this.port.postMessage(message);
-      }
+    //   sendTestMessage(content) {
+    //     const message = {
+    //       kind: "test",
+    //       content: content,
+    //       sessionId: this.sessionId          
+    //     };
+    //     console.log("Sending test message to service worker");
+    //     this.port.postMessage(message);
+    //   }
       
       // Send a completion request to the service worker
       async getCompletions(completionRequest) {
@@ -98,8 +98,9 @@
         const message = {
           kind: "getCompletions",
           requestId: currentRequestId,
-          request: completionRequest
-        };
+          sessionId: this.sessionId,
+          request: typeof completionRequest === 'string' ? completionRequest : completionRequest.toJsonString()
+        };        
         
         // Send message through Chrome port
         this.port.postMessage(message);
@@ -128,7 +129,8 @@
         }
         
         // Send test messages
-        this.client.sendTestMessage("foo");        
+        // this.client.sendTestMessage("foo");
+
       }
       
       // Provide inline completions for the editor
@@ -154,10 +156,58 @@
               }
             }]
           };
+        }        
+                  
+        // Create a simple completion request with the current text
+        const completionRequest = currentText;
+        const completionResponse = await this.client.getCompletions(completionRequest);
+        console.log("Completion response at PIC:", completionResponse);
+        
+        // If no completion response, return empty items
+        if (!completionResponse) {
+          return { items: [] };
         }
         
-        // No suggestion for other text
-        return { items: [] };
+        // Transform the completion response into Monaco format
+        const monacoCompletions = [];
+        
+        try {
+          // Extract completion text from the OpenAI response structure
+          let completionText = '';
+          
+          // Check if we have the expected OpenAI response structure
+            
+            
+            // Extract the completion text from the OpenAI response
+            completionText = completionResponse.choices[0].message.content;
+            console.log("Extracted completion text:", completionText);
+            
+            // Get the current cursor position
+            const startPos = cursorPosition || editor.getPosition();
+            const endPos = startPos;
+            
+            // Create a completion item in Monaco format
+            const monacoCompletion = {
+              insertText: completionText,
+              text: completionText,
+              range: new TextRange(startPos, endPos),
+              command: {
+                id: "ghostText.acceptCompletion",
+                title: "Accept Completion",
+                arguments: ["openai-completion", undefined]
+              }
+            };
+            
+            monacoCompletions.push(monacoCompletion);
+          
+        } catch (error) {
+          console.error("Error processing completion response:", error);
+        }
+        
+        // Return the formatted completions
+        return {
+          items: monacoCompletions
+        };
       }
       
       freeInlineCompletions() {}
@@ -192,6 +242,9 @@
           
           // Create our ghost text provider
           const ghostTextProvider = new MonacoCompletionProvider(extensionId);
+          // Check if the monaco property exists and if it's configurable
+     
+
           
           // Register the provider with Monaco
           if (monacoInstance?.languages?.registerInlineCompletionsProvider) {
