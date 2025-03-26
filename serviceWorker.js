@@ -95,28 +95,30 @@ chrome.runtime.onConnectExternal.addListener((port) => {
 async function callOpenAI(message, port){
     try {
         const apiUrl =  "https://api.openai.com/v1/chat/completions";
-        const system_prompt = "You are veterinary surgeon scribe. Complete the user's text naturally, providing ONLY the continuation of their sentence. Ensure that does not exceed 20 words.  Do not repeat any part of their input. Do not add quotation marks, explanations, or any other text. Just continue the sentence in a natural way.";
+        const system_prompt = "You are veterinary surgeon scribe. Complete the user's text naturally, providing ONLY the continuation of their sentence. Ensure that does not exceed 10 words.  Do not repeat any part of their input. Do not add quotation marks, explanations, or any other text. Just continue the sentence in a natural way.";
+        const requestBody = {
+            model: "ft:gpt-4o-mini-2024-07-18:personal::B4Yni8zt",
+            messages: [{
+                role: "system",
+                content: system_prompt
+            }, {
+                role: "user",
+                content: message.request
+            }],
+            temperature: message.temperature || 0.7,
+            max_tokens: 10
+        };
+        console.log("Request body from serviceWorker:", requestBody);
         const response = await fetch(apiUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${OPENAI_API_KEY}`
             },
-            body: JSON.stringify({
-                model: "ft:gpt-4o-mini-2024-07-18:personal::B4Yni8zt",
-                messages: [{
-                    role: "system",
-                    content: system_prompt
-                }, {
-                    role: "user",
-                    content: message.request
-                }],
-                temperature: message.temperature || 0.7,
-                max_tokens: message.max_tokens || 1000
-            })
+            body: JSON.stringify(requestBody)
         })        
         const data = await response.json()
-        console.log("Server response serviceWorker", data);
+        // console.log("Server response serviceWorker", data);
         // Send response to the port
         return data;
 
